@@ -1,18 +1,12 @@
 from ppo_pytorch.train_test import train
+from ppo_pytorch.PPO import PPO
 from ppo_pytorch.policies import DefaultAC, ConcatAC, InsertAC
 from adrl import make_continual_rl_env
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import gymnasium
 
-
-def training(seeds, policies, total_steps):
-    for seed in seeds:
-        for policy_cls in policies:
-
-            env = make_continual_rl_env()
-            _, stats = train(policy_cls, env, total_steps, False, seed, gif_path=f"./w1_results/gifs/{policy_cls.__name__}_{seed}")
-            stats.to_csv(f"./w1_results/{policy_cls.__name__}_{seed}.csv", index=False)
 
 def plotting(seeds, policies):
     aggregated_stats = {}  # Dictionary to store the aggregated stats DataFrames for each policy
@@ -78,9 +72,35 @@ if __name__ == "__main__":
     POLICIES = [DefaultAC, ConcatAC, InsertAC]
     TOTAL_STEPS = 1e5 + 200
 
-    #training(SEEDS, POLICIES, TOTAL_STEPS)
-    plotting(SEEDS, POLICIES)
-    # plot 
+    update_timestep = 1000
+    K_epochs = 80               # update policy for K epochs in one PPO update
+
+    eps_clip = 0.2          # clip parameter for PPO
+    gamma = 0.99            # discount factor
+    gae_lambda = 0.95
+
+    action_std = 0.6    
+    lr_actor = 0.0003       # learning rate for actor network
+    lr_critic = 0.001       # learning rate for critic networ
+
+    for seed in SEEDS:
+        for policy_cls in POLICIES:
+
+            env = make_continual_rl_env()
+            # state space dimension
+            state_dim = env.observation_space["obs"].shape[0]
+
+            # action space dimension
+            if isinstance(env.action_space, gymnasium.spaces.Discrete):
+                has_continuous_action_space = False
+                action_dim = env.action_space.shape[0]
+            else:
+                has_continuous_action_space = True
+                action_dim = env.action_space.n
+
+            ppo_agent = PPO(policy_cls, state_dim, 1, action_dim, lr_actor, lr_critic, gamma, gae_lambda, K_epochs, eps_clip, has_continuous_action_space, action_std)
+            _, stats = train(ppo_agent, env, TOTAL_STEPS, seed, update_timestep, gif_path=f"./w1_results/gifs/{policy_cls.__name__}_{seed}")
+            stats.to_csv(f"./w1_results/{policy_cls.__name__}_{seed}.csv", index=False)
 
 
     
