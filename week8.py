@@ -89,7 +89,17 @@ def gravity_change(initial_gravity):
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device:", device)
-    model = PPO("MlpPolicy", env, device=device)
+    model = PPO(
+        "MlpPolicy",
+        env,
+        device=device,
+        batch_size=64,
+        ent_coef=0.01,
+        gae_lambda=0.98,
+        gamma=0.999,
+        n_epochs=4,
+        n_steps=1024
+    )
     model.learn(total_timesteps=TOTAL_TIMESTEPS, callback=callback)
     return callback.episode_rewards, callback.gravities
 
