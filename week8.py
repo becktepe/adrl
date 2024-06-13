@@ -5,6 +5,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 from carl.envs import CARLLunarLander
 from gymnasium import Wrapper
 import pandas as pd
+import torch
 
 
 class CurriculumGravityChangeWrapper(Wrapper):
@@ -85,8 +86,10 @@ def gravity_change(initial_gravity):
     callback = RewardTrackerCallback(env=env, total_timesteps=TOTAL_TIMESTEPS)
 
     env = FlattenObservation(env)
-
-    model = PPO("MlpPolicy", env)
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Device:", device)
+    model = PPO("MlpPolicy", env, device=device)
     model.learn(total_timesteps=TOTAL_TIMESTEPS, callback=callback)
     return callback.episode_rewards, callback.gravities
 
