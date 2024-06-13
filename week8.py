@@ -6,6 +6,8 @@ from carl.envs import CARLLunarLander
 from gymnasium import Wrapper
 import pandas as pd
 import torch
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 
 class CurriculumGravityChangeWrapper(Wrapper):
@@ -68,7 +70,7 @@ class RewardTrackerCallback(BaseCallback):
         return True
 
     def _on_rollout_end(self) -> None:
-        rewards = [ep_info['r'] for ep_info in self.model.ep_info_buffer]
+        rewards = [ep_info["r"] for ep_info in self.model.ep_info_buffer]
         if rewards:
             mean_reward = np.mean(rewards)
             self.episode_rewards.append(mean_reward)
@@ -76,11 +78,12 @@ class RewardTrackerCallback(BaseCallback):
 
         # Update the progress of the environment
         self.env.progress = self.num_timesteps / self.total_timesteps * 1.5
+        print("Reward:", mean_reward)
 
 
-def gravity_change(initial_gravity):
-    TOTAL_TIMESTEPS = 1e4
-    GRAVITY_CHANGE_INTERVAL = 1e3
+def gravity_change(initial_gravity, seed):
+    TOTAL_TIMESTEPS = 1e6
+    GRAVITY_CHANGE_INTERVAL = 1e5
 
     env = make_continual_rl_env(gravity_change="random", gravity_change_interval=GRAVITY_CHANGE_INTERVAL, initial_gravity=initial_gravity)
     callback = RewardTrackerCallback(env=env, total_timesteps=TOTAL_TIMESTEPS)
@@ -98,7 +101,8 @@ def gravity_change(initial_gravity):
         gae_lambda=0.98,
         gamma=0.999,
         n_epochs=4,
-        n_steps=1024
+        n_steps=1024,
+        seed=seed
     )
     model.learn(total_timesteps=TOTAL_TIMESTEPS, callback=callback)
     return callback.episode_rewards, callback.gravities
@@ -106,9 +110,9 @@ def gravity_change(initial_gravity):
 
 def main():
     dataframes = []
-    for seed in range(2):
-        for initial_gravity, name in zip([-1, -10], ["Default", "Curriculum"]):
-            episode_rewards, gravities = gravity_change(initial_gravity)
+    for seed in range(3):
+        for initial_gravity, name in zip([-10, -1], ["Default", "Curriculum"]):
+            episode_rewards, gravities = gravity_change(initial_gravity, seed)
 
             df = pd.DataFrame({
                 "Avg. Episode Return": episode_rewards,
@@ -123,5 +127,36 @@ def main():
     result.to_csv("./w8_results/result.csv", index=False)
 
 
+def plot():
+    sns.set_style("whitegrid")
+    sns.set_palette("colorblind")
+
+    data = pd.read_csv("./w8_results/result.csv")
+    data["Steps"] = data.groupby(["Seed", "Name"]).cumcount() * 1024
+    data["Steps"] += 1024
+
+    hue_order = ["Default", "Curriculum"]
+
+    window_size = 10
+    data['SMA Avg. Episode Return'] = data.groupby(['Seed', 'Name'])['Avg. Episode Return'].transform(lambda x: x.rolling(window=window_size, min_periods=1).mean())
+
+    fig = plt.figure(figsize=(6,4))
+    g = sns.lineplot(data=data, y="SMA Avg. Episode Return", x="Steps", hue="Name", errorbar=("ci", 95), hue_order=hue_order)
+    g.set_ylabel("Avg. Episode Return")
+    g.set_xlabel("Steps")
+    plt.title("Return over time")
+    plt.savefig("./w8_results/return_over_time.png", dpi=500)
+    plt.show()
+
+    fig = plt.figure(figsize=(6,4))
+    g = sns.lineplot(data=data, y="Gravity", x="Steps", hue="Name", errorbar=("ci", 95), hue_order=hue_order)
+    g.set_ylabel("Avg. Episode Return")
+    g.set_xlabel("Steps")
+    plt.title("Gravity over time")
+    plt.savefig("./w8_results/gravity_over_time.png", dpi=500)
+    plt.show()
+    
+
 if __name__ == "__main__":
-    main()
+    # main()
+    plot()
